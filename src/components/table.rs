@@ -11,6 +11,8 @@ pub struct Table<A> {
     pub header: Vec<String>,
     pub widths: Vec<Constraint>,
     pub title: Option<String>,
+    pub selected: Option<usize>,
+    pub scroll_offset: Option<usize>,
 }
 
 pub struct TableRow<A> {
@@ -26,6 +28,8 @@ impl<A: Clone> Table<A> {
             header,
             widths,
             title: None,
+            selected: None,
+            scroll_offset: None,
         }
     }
 
@@ -36,6 +40,17 @@ impl<A: Clone> Table<A> {
 
     pub fn add_row(mut self, cells: Vec<String>, style: Option<Style>, action: Option<A>) -> Self {
         self.rows.push(TableRow { cells, style, action });
+        self
+    }
+
+    /// Keeps this row index scrolled into view. `None` (the default) disables scrolling.
+    pub fn selected(mut self, selected: Option<usize>) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    pub fn scroll_offset(mut self, offset: Option<usize>) -> Self {
+        self.scroll_offset = offset;
         self
     }
 }
@@ -51,7 +66,14 @@ impl<S, A: Clone> Component<S, A> for Table<A> {
         let header_cells = self.header.iter().map(|h| Cell::from(h.as_str()).style(Style::default().fg(context.theme.primary)));
         let header = Row::new(header_cells).style(Style::default().add_modifier(ratatui::style::Modifier::BOLD));
 
-        let rows: Vec<Row> = self.rows.iter().map(|r| {
+        // +1 border, +1 header
+        let viewport_height = area.height.saturating_sub(3) as usize;
+        let mut offset = self.scroll_offset.unwrap_or_else(|| crate::scroll_offset(self.selected, self.rows.len(), viewport_height));
+        let max_offset = self.rows.len().saturating_sub(viewport_height);
+        offset = offset.min(max_offset);
+        let visible = &self.rows[offset..(offset + viewport_height).min(self.rows.len())];
+
+        let rows: Vec<Row> = visible.iter().map(|r| {
             let cells = r.cells.iter().map(|c| Cell::from(c.as_str()));
             let mut row = Row::new(cells);
             if let Some(s) = r.style {
@@ -70,8 +92,8 @@ impl<S, A: Clone> Component<S, A> for Table<A> {
 
         // Register clickable areas for rows
         // Note: This is an approximation as Ratatui Table doesn't expose row offsets easily.
-        // For simple tables without wrapping, each row is 1 line + 1 for header.
-        for (i, row) in self.rows.iter().enumerate() {
+        // For simple tables without wrapping, each visible row is 1 line + 1 for header.
+        for (i, row) in visible.iter().enumerate() {
             if let Some(action) = &row.action {
                 let row_area = Rect {
                     x: area.x + 1,

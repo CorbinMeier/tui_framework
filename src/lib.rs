@@ -40,6 +40,21 @@ pub fn pad_to_width(s: &str, target_width: usize) -> String {
     result
 }
 
+/// Computes a scroll offset so `selected` stays within a `viewport_height`-row window out of
+/// `len` total rows. Recomputed fresh every frame (no persisted scroll state needed).
+pub fn scroll_offset(selected: Option<usize>, len: usize, viewport_height: usize) -> usize {
+    if viewport_height == 0 || len <= viewport_height {
+        return 0;
+    }
+    let max_offset = len - viewport_height;
+    let sel = match selected {
+        Some(s) => s,
+        None => return 0,
+    };
+    let offset = if sel < viewport_height { 0 } else { sel + 1 - viewport_height };
+    offset.min(max_offset)
+}
+
 pub trait Component<S, A> {
     fn render(&self, f: &mut Frame, state: &mut S, area: Rect, context: &mut Context<A>);
 }
